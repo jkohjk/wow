@@ -6,12 +6,16 @@
 3. cmd : gradle jar
 
 ## Run
-1. cmd : java -cp build\libs\* wow.BoEs [configFilename]
-- linux/mac : java -cp build/libs/* BoEs [configFilename]
+1. cmd : java -cp build\libs\* com.jkoh.wow.BoEs [configFilename]
+	- linux/mac : java -cp build/libs/* BoEs [configFilename]
 	- configFilename can be ommited, config.json will be used.
 		- config.json will be automatically created if it does not exist.
 2. to write to file instead of console
-	java -cp build\libs\* wow.BoEs [configFilename] > [resultsFilename]
+	- java -cp build\libs\* com.jkoh.wow.BoEs [configFilename] > [resultsFilename]
+	
+## Run with standalone jar
+1. cmd : java -jar standalone\wow-legion-boe-all.jar
+	- linux/mac : java -jar standalone/wow-legion-boe-all.jar
 
 ## Config
 1. apikey: provide your own apikey to avoid sharing bandwidth with others.
@@ -20,7 +24,7 @@
 	- only the first realm of each group will be used. others are for display only.
 3. itemids: provide a list of itemids to be matched against, and the text to be displayed.
 4. bonusids: provide a list of bonusids to be matched against, and the extra text to be displayed.
-	- requireBonus: if true, bonusids have to match to display the item, otherwise it will just be used for extra text to be displayed.
+	- bonusRequirement: 0 = bonus not required to exist or match. 1 = bonus must match only if it exists. 2 = bonus must exist and match
 5. modifierValues: provide a list of modifier types and values to be matched against. 
-	- requireModifier: if true, modifier types and values have to match to display the item, otherwise it will just be used for extra text to be displayed.
 	- modifiers: extra text to display for modifier types.
+	- modifierRequirement: 0 = modifier not required to exist or match. 1 = modifier must match only if it exists. 2 = modifier must exist and match

@@ -1,5 +1,5 @@
 apply plugin: 'java'
-archivesBaseName = 'wow-boe'
+archivesBaseName = 'wow-legion-boe'
 buildscript {
     repositories {
         mavenCentral()
@@ -30,4 +30,14 @@ configurations.compile.each { File file ->
         from file.absolutePath
         into "$buildDir/libs"
     }
+}
+
+//create a single Jar with all dependencies
+task standaloneJar(type: Jar) {
+	manifest {
+        attributes 'Main-Class': 'com.jkoh.wow.BoEs'
+    }
+    baseName = archivesBaseName + '-all'
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
 }

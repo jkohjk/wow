@@ -1,4 +1,4 @@
-package wow;
+package com.jkoh.wow;
 
 import java.io.*;
 import java.util.*;
@@ -24,11 +24,11 @@ public class BoEs {
 		public String apikey;
 		public Map<Region, List<List<String>>> realms;	// list of cross realm groups
 		public Map<Integer, String> itemids;
-		public boolean requireBonus;
 		public Map<Integer, String> bonusids;
-		public boolean requireModifier;
-		public Map<Integer, String> modifiers;
+		public int bonusRequirement;
 		public Map<Integer, List<Integer>> modifierValues;
+		public Map<Integer, String> modifiers;
+		public int modifierRequirement;
 	}
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	private static class Item {
@@ -48,16 +48,16 @@ public class BoEs {
 			try {
 				config = mapper.readValue(FileUtils.readFileToString(configFile), Config.class);
 			} catch (Exception e) {
-				System.out.println("Failed to load file : " + configFilename);
+				System.out.println("Failed to load config file : " + configFilename);
 			}
 		} else if(filenameProvided) {
-			System.out.println("File not found : " + configFilename);
+			System.out.println("Config file not found : " + configFilename);
 		} else {
 			config = generateDefaultConfig();
 			try {
 				FileUtils.writeStringToFile(configFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(config), "utf-8");
 			} catch (Exception e) {
-				System.out.println("Failed to write file : " + configFilename);
+				System.out.println("Failed to write config file : " + configFilename);
 			}
 		}
 		
@@ -84,31 +84,33 @@ public class BoEs {
 										Item item = mapper.readValue(mapper.writeValueAsString(itemObject), Item.class);
 										int itemID = item.item;
 										if(config.itemids.containsKey(itemID)) {
-											boolean bonusMatch = false;
 											StringBuilder itemString = new StringBuilder(config.itemids.get(itemID));
-											if(item.bonusLists != null) {
+											boolean bonusExist = item.bonusLists != null;
+											boolean bonusMatch = false;
+											if(bonusExist) {
 												List<Map<String, Integer>> bonuses = item.bonusLists;
 												for(Map<String, Integer> bonus : bonuses) {
 													int bonusID = (int)bonus.get("bonusListId");
 													if(config.bonusids.containsKey(bonusID)) {
 														if(!bonusMatch) itemString.append("[");
-														else itemString.append(",");
+														else itemString.append(", ");
 														itemString.append(config.bonusids.get(bonusID));
 														bonusMatch = true;
 													}
 												}
 												if(bonusMatch) itemString.append("]");
 											}
-											if(!config.requireBonus || bonusMatch) {
+											if(config.bonusRequirement == 0 || bonusMatch || (config.bonusRequirement == 1 && !bonusExist)) {
+												boolean modifierExist = item.modifiers != null;
 												boolean modifierMatch = false;
-												if(item.modifiers != null) {
+												if(modifierExist) {
 													List<Map<String, Integer>> modifiers = item.modifiers;
 													for(Map<String, Integer> modifier : modifiers) {
 														int modifierType = (int)modifier.get("type");
 														int modifierValue = (int)modifier.get("value");
 														if(config.modifierValues.containsKey(modifierType) && config.modifierValues.get(modifierType).contains(modifierValue)) {
 															if(!modifierMatch) itemString.append("(");
-															else itemString.append(",");
+															else itemString.append(", ");
 															if(config.modifiers.containsKey(modifierType)) itemString.append(config.modifiers.get(modifierType) + ":");
 															itemString.append(modifierValue);
 															modifierMatch = true;
@@ -116,7 +118,7 @@ public class BoEs {
 													}
 													if(modifierMatch) itemString.append(")");
 												}
-												if(!config.requireModifier || modifierMatch) {
+												if(config.modifierRequirement == 0 || modifierMatch || (config.modifierRequirement == 1 && !modifierExist)) {
 													itemString.append(" bid:" + item.bid/10000 + " buyout:" + item.buyout/10000);
 													System.out.println(itemString.toString());
 												}
@@ -436,7 +438,6 @@ public class BoEs {
 		config.itemids.put(141588, "Talisman of Jaimil Lightheart");
 		config.itemids.put(141589, "Treia's Handcrafted Shroud");
 		config.itemids.put(141590, "Cloak of Martayl Oceanstrider");
-		config.requireBonus = false;
 		config.bonusids = new LinkedHashMap<>();
 		config.bonusids.put(40, "Avoidance");
 		config.bonusids.put(41, "Leech");
@@ -457,11 +458,12 @@ public class BoEs {
 		config.bonusids.put(1552, "Item Level 890");
 		config.bonusids.put(1557, "Item Level 895");
 		config.bonusids.put(3398, "Scales with level");
-		config.requireModifier = false;
-		config.modifiers = new LinkedHashMap<>();
-		config.modifiers.put(9, "Level");
+		config.bonusRequirement = 1;
 		config.modifierValues = new LinkedHashMap<>();
 		config.modifierValues.put(9, Arrays.asList(98, 99, 100));
+		config.modifiers = new LinkedHashMap<>();
+		config.modifiers.put(9, "Level");
+		config.modifierRequirement = 1;
 		return config;
 	}
 }
