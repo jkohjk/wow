@@ -1,0 +1,33 @@
+apply plugin: 'java'
+archivesBaseName = 'wow-boe'
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+// Java configuration
+sourceCompatibility = 1.8
+[compileJava]*.options*.encoding = 'UTF-8'
+sourceSets.main.java.srcDirs = ["src/"]
+
+jar.dependsOn test
+test.outputs.upToDateWhen {false}
+
+// App's dependencies
+dependencies {
+	compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.8.+'
+	compile group: 'commons-io', name: 'commons-io', version: '2.5'
+	compile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.+'
+}
+configurations.compile.each { File file ->
+    copy {
+        from file.absolutePath
+        into "$buildDir/libs"
+    }
+}
