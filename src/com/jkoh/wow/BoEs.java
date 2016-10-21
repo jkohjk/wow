@@ -14,7 +14,7 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
 
 public class BoEs {
-	private static ExecutorService executors = Executors.newFixedThreadPool(10);
+	private static ExecutorService executors = Executors.newFixedThreadPool(4);
 	private static ExecutorService printer = Executors.newSingleThreadExecutor();
 	private static ObjectMapper mapper = new ObjectMapper();
 	private static String auctionUrlFormat = "https://%s.api.battle.net/wow/auction/data/%s?locale=en_US&apikey=%s";
