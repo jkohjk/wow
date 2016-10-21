@@ -3,6 +3,7 @@ package com.jkoh.wow;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.FileUtils;
@@ -13,8 +14,9 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
 
 public class BoEs {
+	private static ExecutorService executors = Executors.newFixedThreadPool(10);
+	private static ExecutorService printer = Executors.newSingleThreadExecutor();
 	private static ObjectMapper mapper = new ObjectMapper();
-	private static HttpClient httpclient = new DefaultHttpClient();
 	private static String auctionUrlFormat = "https://%s.api.battle.net/wow/auction/data/%s?locale=en_US&apikey=%s";
 	private static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'GMT'Z");
 	private enum Region {
@@ -45,136 +47,159 @@ public class BoEs {
 		boolean filenameProvided = args.length > 0;
 		String configFilename = filenameProvided ? args[0] : "config.json";
 		File configFile = new File(configFilename);
-		Config config = null;
+		Config readConfig = null;
 		if(configFile.exists()) {
 			try {
-				config = mapper.readValue(FileUtils.readFileToString(configFile), Config.class);
+				readConfig = mapper.readValue(FileUtils.readFileToString(configFile), Config.class);
 			} catch (Exception e) {
 				System.out.println("Failed to load config file : " + configFilename);
 			}
 		} else if(filenameProvided) {
 			System.out.println("Config file not found : " + configFilename);
 		} else {
-			config = generateDefaultConfig();
+			readConfig = generateDefaultConfig();
 			try {
-				FileUtils.writeStringToFile(configFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(config), "utf-8");
+				FileUtils.writeStringToFile(configFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(readConfig), "utf-8");
 			} catch (Exception e) {
 				System.out.println("Failed to write config file : " + configFilename);
 			}
 		}
 		
-		int errorThreshold = 10;
-		int error = 0;
-		if(config != null) {
-			System.out.println("Starting at " + dateFormat.format(new Date()));
-			int totalRealmGroups = 0;
+		if(readConfig != null) {
+			final Config config = readConfig;
+			System.out.println("Started at " + dateFormat.format(new Date()));
+			System.out.println();
+			int countRealmGroups = 0;
 			for(Region region : config.realms.keySet()) {
-				totalRealmGroups += config.realms.get(region).size();
+				countRealmGroups += config.realms.get(region).size();
 			}
-			int progress = 0;
-			outer: for(Region region : config.realms.keySet()) {
-				for(List<String> realmGroup : config.realms.get(region)) {
-					String auctionLink = httpGet(String.format(auctionUrlFormat, region.subdomain(), realmGroup.get(0), config.apikey));
-					if(auctionLink != null) {
-						try {
-							Map<String, List<Map<String, String>>> auctionLinkMap = mapper.readValue(auctionLink, HashMap.class);
-							String auctionData = httpGet(auctionLinkMap.get("files").get(0).get("url"));
-							if(auctionData != null) {
-								try {
-									System.out.println("===== " + (++progress) + "/" + totalRealmGroups + " " + region + ":" + realmGroup + " =====");
-									Map<String, List<Object>> auctionDataMap = mapper.readValue(auctionData, HashMap.class);
-									for(Object itemObject : auctionDataMap.get("auctions")) {
-										Item item = mapper.readValue(mapper.writeValueAsString(itemObject), Item.class);
-										int itemID = item.item;
-										if(config.itemids.containsKey(itemID)) {
-											StringBuilder itemString = new StringBuilder(config.itemids.get(itemID));
-											boolean bonusExist = item.bonusLists != null;
-											boolean bonusMatch = false;
-											if(bonusExist) {
-												List<Map<String, Integer>> bonuses = item.bonusLists;
-												for(Map<String, Integer> bonus : bonuses) {
-													int bonusID = (int)bonus.get("bonusListId");
-													if(config.bonusids.containsKey(bonusID)) {
-														if(!bonusMatch) itemString.append("[");
-														else itemString.append(", ");
-														itemString.append(config.bonusids.get(bonusID));
-														bonusMatch = true;
-													}
-												}
-												if(bonusMatch) itemString.append("]");
-											}
-											if(config.bonusRequirement == 0 || bonusMatch || (config.bonusRequirement == 1 && !bonusExist)) {
-												boolean modifierExist = item.modifiers != null;
-												boolean modifierMatch = false;
-												if(modifierExist) {
-													List<Map<String, Integer>> modifiers = item.modifiers;
-													for(Map<String, Integer> modifier : modifiers) {
-														int modifierType = (int)modifier.get("type");
-														int modifierValue = (int)modifier.get("value");
-														if(config.modifierValues.containsKey(modifierType) && config.modifierValues.get(modifierType).contains(modifierValue)) {
-															if(!modifierMatch) itemString.append("(");
-															else itemString.append(", ");
-															if(config.modifiers.containsKey(modifierType)) itemString.append(config.modifiers.get(modifierType) + ":");
-															itemString.append(modifierValue);
-															modifierMatch = true;
+			final int totalRealmGroups = countRealmGroups;
+			final CountDownLatch latch = new CountDownLatch(totalRealmGroups);
+			for(final Region region : config.realms.keySet()) {
+				for(final List<String> realmGroup : config.realms.get(region)) {
+					executors.submit(new Runnable() {
+						public void run() {
+							try {
+								Map<String, Object> auctionLinkResult = httpGet(String.format(auctionUrlFormat, region.subdomain(), realmGroup.get(0), config.apikey));
+								if((Integer)auctionLinkResult.get("status") == 200) {
+									InputStream auctionLinkStream = (InputStream)auctionLinkResult.get("content");
+									Map<String, List<Map<String, String>>> auctionLinkMap = null;
+									try {
+										auctionLinkMap = mapper.readValue(auctionLinkStream, HashMap.class);
+										Map<String, Object> auctionDataResult = httpGet(auctionLinkMap.get("files").get(0).get("url"));
+										if((Integer)auctionDataResult.get("status") == 200) {
+											final InputStream auctionDataStream = (InputStream)auctionDataResult.get("content");
+											StringBuilder auctionDataString = new StringBuilder();
+											try {
+												Map<String, List<Object>> auctionDataMap = mapper.readValue(auctionDataStream, HashMap.class);
+												for(Object itemObject : auctionDataMap.get("auctions")) {
+													Item item = mapper.readValue(mapper.writeValueAsString(itemObject), Item.class);
+													int itemID = item.item;
+													if(config.itemids.containsKey(itemID)) {
+														StringBuilder itemString = new StringBuilder(config.itemids.get(itemID));
+														boolean bonusExist = item.bonusLists != null;
+														boolean bonusMatch = false;
+														if(bonusExist) {
+															List<Map<String, Integer>> bonuses = item.bonusLists;
+															for(Map<String, Integer> bonus : bonuses) {
+																int bonusID = (int)bonus.get("bonusListId");
+																if(config.bonusids.containsKey(bonusID)) {
+																	if(!bonusMatch) itemString.append("[");
+																	else itemString.append(", ");
+																	itemString.append(config.bonusids.get(bonusID));
+																	bonusMatch = true;
+																}
+															}
+															if(bonusMatch) itemString.append("]");
+														}
+														if(config.bonusRequirement == 0 || bonusMatch || (config.bonusRequirement == 1 && !bonusExist)) {
+															boolean modifierExist = item.modifiers != null;
+															boolean modifierMatch = false;
+															if(modifierExist) {
+																List<Map<String, Integer>> modifiers = item.modifiers;
+																for(Map<String, Integer> modifier : modifiers) {
+																	int modifierType = (int)modifier.get("type");
+																	int modifierValue = (int)modifier.get("value");
+																	if(config.modifierValues.containsKey(modifierType) && config.modifierValues.get(modifierType).contains(modifierValue)) {
+																		if(!modifierMatch) itemString.append("(");
+																		else itemString.append(", ");
+																		if(config.modifiers.containsKey(modifierType)) itemString.append(config.modifiers.get(modifierType) + ":");
+																		itemString.append(modifierValue);
+																		modifierMatch = true;
+																	}
+																}
+																if(modifierMatch) itemString.append(")");
+															}
+															if(config.modifierRequirement == 0 || modifierMatch || (config.modifierRequirement == 1 && !modifierExist)) {
+																itemString.append(" bid:" + item.bid/10000 + " buyout:" + item.buyout/10000);
+																if(auctionDataString.length() > 0) auctionDataString.append("\n");
+																auctionDataString.append(itemString.toString());
+															}
 														}
 													}
-													if(modifierMatch) itemString.append(")");
 												}
-												if(config.modifierRequirement == 0 || modifierMatch || (config.modifierRequirement == 1 && !modifierExist)) {
-													itemString.append(" bid:" + item.bid/10000 + " buyout:" + item.buyout/10000);
-													System.out.println(itemString.toString());
-												}
+												print(latch.getCount(), totalRealmGroups, region, realmGroup, auctionDataString.toString());
+												latch.countDown();
+											} catch (Exception e) {
+												e.printStackTrace();
+												if(auctionDataString.length() > 0) auctionDataString.append("\n");
+												print(latch.getCount(), totalRealmGroups, region, realmGroup, auctionDataString.toString() + "Error processing auction data, " + e);
+												latch.countDown();
 											}
+										} else {
+											print(latch.getCount(), totalRealmGroups, region, realmGroup, "Fail to get auction data, status " + auctionDataResult.get("status"));
+											latch.countDown();
 										}
+									} catch (Exception e) {
+										System.err.println(auctionLinkMap);
+										e.printStackTrace();
+										print(latch.getCount(), totalRealmGroups, region, realmGroup, "Fail to read auction link, " + e);
+										latch.countDown();
 									}
-								} catch (Exception e) {
-									System.out.println(region + ":" + realmGroup + " error processing auction data");
-									System.err.println(region + ":" + realmGroup + " error processing auction data");
-									e.printStackTrace();
-									error++;
+								} else {
+									print(latch.getCount(), totalRealmGroups, region, realmGroup, "Fail to get auction link, status " + auctionLinkResult.get("status"));
+									latch.countDown();
 								}
-							} else {
-								System.out.println(region + ":" + realmGroup + " fail to get auction data");
-								System.err.println(region + ":" + realmGroup + " fail to get auction data");
-								System.err.println(auctionLink);
-								error++;
+							} catch (Exception e) {
+								e.printStackTrace();
+								print(latch.getCount(), totalRealmGroups, region, realmGroup, "Fail to get auction link, " + e);
+								latch.countDown();
 							}
-						} catch (Exception e) {
-							System.out.println(region + ":" + realmGroup + " fail to read auction link");
-							System.err.println(region + ":" + realmGroup + " fail to read auction link");
-							System.err.println(auctionLink);
-							e.printStackTrace();
-							error++;
 						}
-					} else {
-						System.out.println(region + ":" + realmGroup + " fail to get auction link");
-						System.err.println(region + ":" + realmGroup + " fail to get auction link");
-						error++;
-					}
-					if(error >= errorThreshold) {
-						System.out.println(errorThreshold + " errors encountered. Stopping");
-						break outer;
-					}
+					});
 				}
 			}
-			System.out.println("Finished at " + dateFormat.format(new Date()));
+			try {
+				latch.await();
+			} catch (Exception e) {}
+			printer.submit(new Runnable() {
+				public void run() {
+					System.out.println("Finished at " + dateFormat.format(new Date()));
+				}
+			});
+			executors.shutdown();
+			printer.shutdown();
 		}
 	}
-	private static String httpGet(String url) {
-		try {
-			HttpResponse response = httpclient.execute(new HttpGet(url));
-			int status = response.getStatusLine().getStatusCode();
-			if (status == 200) {
-				return EntityUtils.toString(response.getEntity());
-			} else {
-				System.err.println(url + " return status " + status);
-			}
-		} catch (Exception e) {
-			System.err.println(url);
-			e.printStackTrace();
+	private static Map<String, Object> httpGet(String url) throws Exception {
+		Map<String, Object> result = new HashMap<>();
+		HttpClient httpclient = new DefaultHttpClient();
+		HttpResponse response = httpclient.execute(new HttpGet(url));
+		int status = response.getStatusLine().getStatusCode();
+		result.put("status", status);
+		if (status == 200) {
+			result.put("content", response.getEntity().getContent());
 		}
-		return null;
+		return result;
+	}
+	private static void print(final long remain, final long total, final Region region, final List<String> realmGroup, final String result) {
+		printer.submit(new Runnable() {
+			public void run() {
+				System.out.println("===== " + (total - remain + 1) + "/" + total + " " + region + ":" + realmGroup + " =====");
+				System.out.println(result);
+				System.out.println();
+			}
+		});
 	}
 	private static Config generateDefaultConfig() {
 		Config config = new Config();
