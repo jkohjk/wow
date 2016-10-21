@@ -74,7 +74,7 @@ public class BoEs {
 			int progress = 0;
 			outer: for(Region region : config.realms.keySet()) {
 				for(List<String> realmGroup : config.realms.get(region)) {
-					String auctionLink = httpGet(String.format(auctionUrlFormat, region, realmGroup.get(0), config.apikey));
+					String auctionLink = httpGet(String.format(auctionUrlFormat, region.subdomain(), realmGroup.get(0), config.apikey));
 					if(auctionLink != null) {
 						try {
 							Map<String, List<Map<String, String>>> auctionLinkMap = mapper.readValue(auctionLink, HashMap.class);
