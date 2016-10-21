@@ -12,10 +12,10 @@
 		- config.json will be automatically created if it does not exist.
 2. to write to file instead of console
 	- java -cp build\libs\* com.jkoh.wow.BoEs [configFilename] > [resultsFilename]
-	
+
 ## Run with standalone jar
-1. cmd : java -jar standalone\wow-legion-boe-all.jar
-	- linux/mac : java -jar standalone/wow-legion-boe-all.jar
+1. cmd : java -jar standalone\wow-legion-boe-all.jar [configFilename]
+	- linux/mac : java -jar standalone/wow-legion-boe-all.jar [configFilename]
 
 ## Config
 1. apikey: provide your own apikey to avoid sharing bandwidth with others.

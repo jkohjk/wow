@@ -1,6 +1,7 @@
 package com.jkoh.wow;
 
 import java.io.*;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,10 +16,11 @@ public class BoEs {
 	private static ObjectMapper mapper = new ObjectMapper();
 	private static HttpClient httpclient = new DefaultHttpClient();
 	private static String auctionUrlFormat = "https://%s.api.battle.net/wow/auction/data/%s?locale=en_US&apikey=%s";
+	private static SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'GMT'Z");
 	private enum Region {
 		US { public String subdomain() {return "us";} }, 
 		EU { public String subdomain() {return "eu";} };
-		public String subdomain() {return null;}
+		public abstract String subdomain();
 	}
 	private static class Config {
 		public String apikey;
@@ -64,6 +66,7 @@ public class BoEs {
 		int errorThreshold = 10;
 		int error = 0;
 		if(config != null) {
+			System.out.println("Starting at " + dateFormat.format(new Date()));
 			int totalRealmGroups = 0;
 			for(Region region : config.realms.keySet()) {
 				totalRealmGroups += config.realms.get(region).size();
@@ -147,6 +150,7 @@ public class BoEs {
 					}
 				}
 			}
+			System.out.println("Finished at " + dateFormat.format(new Date()));
 		}
 	}
 	private static String httpGet(String url) {
