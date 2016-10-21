@@ -130,18 +130,26 @@ public class BoEs {
 									}
 								} catch (Exception e) {
 									System.out.println(region + ":" + realmGroup + " error processing auction data");
+									System.err.println(region + ":" + realmGroup + " error processing auction data");
 									e.printStackTrace();
+									error++;
 								}
 							} else {
 								System.out.println(region + ":" + realmGroup + " fail to get auction data");
+								System.err.println(region + ":" + realmGroup + " fail to get auction data");
+								System.err.println(auctionLink);
 								error++;
 							}
 						} catch (Exception e) {
 							System.out.println(region + ":" + realmGroup + " fail to read auction link");
+							System.err.println(region + ":" + realmGroup + " fail to read auction link");
+							System.err.println(auctionLink);
+							e.printStackTrace();
 							error++;
 						}
 					} else {
 						System.out.println(region + ":" + realmGroup + " fail to get auction link");
+						System.err.println(region + ":" + realmGroup + " fail to get auction link");
 						error++;
 					}
 					if(error >= errorThreshold) {
@@ -159,8 +167,13 @@ public class BoEs {
 			int status = response.getStatusLine().getStatusCode();
 			if (status == 200) {
 				return EntityUtils.toString(response.getEntity());
+			} else {
+				System.err.println(url + " return status " + status);
 			}
-		} catch (Exception e) {}
+		} catch (Exception e) {
+			System.err.println(url);
+			e.printStackTrace();
+		}
 		return null;
 	}
 	private static Config generateDefaultConfig() {
