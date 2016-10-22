@@ -10,7 +10,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 
 public class BoEs {
@@ -50,7 +50,7 @@ public class BoEs {
 		Config readConfig = null;
 		if(configFile.exists()) {
 			try {
-				readConfig = mapper.readValue(FileUtils.readFileToString(configFile), Config.class);
+				readConfig = mapper.readValue(FileUtils.readFileToString(configFile, "utf-8"), Config.class);
 			} catch (Exception e) {
 				System.out.println("Failed to load config file : " + configFilename);
 			}
@@ -75,23 +75,26 @@ public class BoEs {
 			}
 			final int totalRealmGroups = countRealmGroups;
 			final CountDownLatch latch = new CountDownLatch(totalRealmGroups);
+			final Map<Region, List<List<String>>> pendingRealms = new HashMap<>();
 			for(final Region region : config.realms.keySet()) {
+				pendingRealms.put(region, new ArrayList<>());
 				for(final List<String> realmGroup : config.realms.get(region)) {
+					pendingRealms.get(region).add(realmGroup);
 					executors.submit(new Runnable() {
 						public void run() {
 							try {
 								Map<String, Object> auctionLinkResult = httpGet(String.format(auctionUrlFormat, region.subdomain(), realmGroup.get(0), config.apikey));
 								if((Integer)auctionLinkResult.get("status") == 200) {
-									InputStream auctionLinkStream = (InputStream)auctionLinkResult.get("content");
+									String auctionLink = (String)auctionLinkResult.get("content");
 									Map<String, List<Map<String, String>>> auctionLinkMap = null;
 									try {
-										auctionLinkMap = mapper.readValue(auctionLinkStream, HashMap.class);
+										auctionLinkMap = mapper.readValue(auctionLink, HashMap.class);
 										Map<String, Object> auctionDataResult = httpGet(auctionLinkMap.get("files").get(0).get("url"));
 										if((Integer)auctionDataResult.get("status") == 200) {
-											final InputStream auctionDataStream = (InputStream)auctionDataResult.get("content");
+											String auctionData = (String)auctionDataResult.get("content");
 											StringBuilder auctionDataString = new StringBuilder();
 											try {
-												Map<String, List<Object>> auctionDataMap = mapper.readValue(auctionDataStream, HashMap.class);
+												Map<String, List<Object>> auctionDataMap = mapper.readValue(auctionData, HashMap.class);
 												for(Object itemObject : auctionDataMap.get("auctions")) {
 													Item item = mapper.readValue(mapper.writeValueAsString(itemObject), Item.class);
 													int itemID = item.item;
@@ -165,41 +168,71 @@ public class BoEs {
 								print(latch.getCount(), totalRealmGroups, region, realmGroup, "Fail to get auction link, " + e);
 								latch.countDown();
 							}
+							if(pendingRealms != null) {
+								pendingRealms.get(region).remove(realmGroup);
+								if(pendingRealms.get(region).isEmpty()) pendingRealms.remove(region);
+							}
 						}
 					});
 				}
 			}
 			try {
-				latch.await();
+				latch.await(59, TimeUnit.MINUTES);
 			} catch (Exception e) {}
+			executors.shutdown();
+			try {
+				if(!executors.awaitTermination(1, TimeUnit.MINUTES)) {
+					executors.shutdownNow();
+				}
+			} catch (Exception e) {
+				executors.shutdownNow();
+			}
 			printer.submit(new Runnable() {
 				public void run() {
+					if(pendingRealms != null && !pendingRealms.isEmpty()) {
+						System.out.println("Incomplete realms :");
+						for(final Region region : pendingRealms.keySet()) {
+							System.out.println(region + " :");
+							for(final List<String> realmGroup : pendingRealms.get(region)) {
+								System.out.println(realmGroup);
+							}
+						}
+						System.out.println();
+					}
 					System.out.println("Finished at " + dateFormat.format(new Date()));
 				}
 			});
-			executors.shutdown();
 			printer.shutdown();
+			try {
+				if(!printer.awaitTermination(1, TimeUnit.SECONDS)) {
+					printer.shutdownNow();
+				}
+			} catch (Exception e) {
+				printer.shutdownNow();
+			}
 		}
 	}
 	private static Map<String, Object> httpGet(String url) throws Exception {
 		Map<String, Object> result = new HashMap<>();
-		HttpClient httpclient = new DefaultHttpClient();
+		HttpClient httpclient = HttpClientBuilder.create().build();
 		HttpResponse response = httpclient.execute(new HttpGet(url));
 		int status = response.getStatusLine().getStatusCode();
 		result.put("status", status);
 		if (status == 200) {
-			result.put("content", response.getEntity().getContent());
+			result.put("content", EntityUtils.toString(response.getEntity()));
 		}
 		return result;
 	}
 	private static void print(final long remain, final long total, final Region region, final List<String> realmGroup, final String result) {
-		printer.submit(new Runnable() {
-			public void run() {
-				System.out.println("===== " + (total - remain + 1) + "/" + total + " " + region + ":" + realmGroup + " =====");
-				System.out.println(result);
-				System.out.println();
-			}
-		});
+		try{
+			printer.submit(new Runnable() {
+				public void run() {
+					System.out.println("===== " + (total - remain + 1) + "/" + total + " " + region + ":" + realmGroup + " =====");
+					System.out.println(result);
+					System.out.println();
+				}
+			});
+		} catch (Exception e) {}
 	}
 	private static Config generateDefaultConfig() {
 		Config config = new Config();
