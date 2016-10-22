@@ -7,7 +7,7 @@
 
 ## Run
 1. cmd : java -cp build\libs\* com.jkoh.wow.BoEs [configFilename]
-	- linux/mac : java -cp build/libs/* BoEs [configFilename]
+	- linux/mac : java -cp .:build/libs/* com.jkoh.wow.BoEs [configFilename]
 	- configFilename can be ommited, config.json will be used.
 		- config.json will be automatically created if it does not exist.
 2. to write to file instead of console

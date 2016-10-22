@@ -14,7 +14,7 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 
 public class BoEs {
-	private static ExecutorService executors = Executors.newFixedThreadPool(4);
+	private static ExecutorService executors = Executors.newFixedThreadPool(2);
 	private static ExecutorService printer = Executors.newSingleThreadExecutor();
 	private static ObjectMapper mapper = new ObjectMapper();
 	private static String auctionUrlFormat = "https://%s.api.battle.net/wow/auction/data/%s?locale=en_US&apikey=%s";
@@ -166,6 +166,10 @@ public class BoEs {
 							} catch (Exception e) {
 								e.printStackTrace();
 								print(latch.getCount(), totalRealmGroups, region, realmGroup, "Fail to get auction link, " + e);
+								latch.countDown();
+							} catch (Error e) {
+								e.printStackTrace();
+								print(latch.getCount(), totalRealmGroups, region, realmGroup, "Error, " + e);
 								latch.countDown();
 							}
 							if(pendingRealms != null) {
