@@ -1,0 +1,3 @@
+0 */6 * * * ./BoEs.sh US configus.json
+0 3-23/6 * * * ./BoEs.sh EU configeu.json
+0 * * * * find /usr/share/tomcat8/webapps/ROOT/wow -mtime +0 -type f -delete
