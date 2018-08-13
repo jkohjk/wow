@@ -28,11 +28,12 @@ public class BoEs {
 		public String apikey;
 		public Map<Region, List<List<String>>> realms;	// list of cross realm groups
 		public Map<Integer, String> itemids;
-		public Map<Integer, String> bonusids;
-		public int bonusRequirement;
-		public Map<Integer, List<Integer>> modifierValues;
-		public Map<Integer, String> modifiers;
-		public int modifierRequirement;
+		public boolean bonusRequired;
+		public Map<Integer, String> bonusids_required;
+		public Map<Integer, String> bonusids_display;
+		public boolean modifierRequired;
+		public Map<Integer, List<Integer>> modifiers_required;
+		public Map<Integer, String> modifiers_display;
 	}
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	private static class Item {
@@ -102,38 +103,53 @@ public class BoEs {
 														StringBuilder itemString = new StringBuilder(config.itemids.get(itemID));
 														boolean bonusExist = item.bonusLists != null;
 														boolean bonusMatch = false;
+														boolean bonusRequirementMet = false;
 														if(bonusExist) {
 															List<Map<String, Integer>> bonuses = item.bonusLists;
 															for(Map<String, Integer> bonus : bonuses) {
 																int bonusID = (int)bonus.get("bonusListId");
-																if(config.bonusids.containsKey(bonusID)) {
+																if(config.bonusids_required.containsKey(bonusID)) {
 																	if(!bonusMatch) itemString.append("[");
 																	else itemString.append(", ");
-																	itemString.append(config.bonusids.get(bonusID));
+																	itemString.append(config.bonusids_required.get(bonusID));
+																	bonusMatch = true;
+																	bonusRequirementMet = true;
+																} else if(config.bonusids_display.containsKey(bonusID)) {
+																	if(!bonusMatch) itemString.append("[");
+																	else itemString.append(", ");
+																	itemString.append(config.bonusids_display.get(bonusID));
 																	bonusMatch = true;
 																}
 															}
 															if(bonusMatch) itemString.append("]");
 														}
-														if(config.bonusRequirement == 0 || bonusMatch || (config.bonusRequirement == 1 && !bonusExist)) {
+														if(!config.bonusRequired || bonusRequirementMet || (config.modifierRequired && !bonusExist)) {
 															boolean modifierExist = item.modifiers != null;
 															boolean modifierMatch = false;
+															boolean modifierRequirementMet = false;
 															if(modifierExist) {
 																List<Map<String, Integer>> modifiers = item.modifiers;
 																for(Map<String, Integer> modifier : modifiers) {
 																	int modifierType = (int)modifier.get("type");
 																	int modifierValue = (int)modifier.get("value");
-																	if(config.modifierValues.containsKey(modifierType) && config.modifierValues.get(modifierType).contains(modifierValue)) {
+																	if(config.modifiers_required.containsKey(modifierType) && config.modifiers_required.get(modifierType).contains(modifierValue)) {
 																		if(!modifierMatch) itemString.append("(");
 																		else itemString.append(", ");
-																		if(config.modifiers.containsKey(modifierType)) itemString.append(config.modifiers.get(modifierType) + ":");
+																		if(config.modifiers_display.containsKey(modifierType)) itemString.append(config.modifiers_display.get(modifierType) + ":");
+																		itemString.append(modifierValue);
+																		modifierMatch = true;
+																		modifierRequirementMet = true;
+																	} else if(config.modifiers_display.containsKey(modifierType)) {
+																		if(!modifierMatch) itemString.append("(");
+																		else itemString.append(", ");
+																		itemString.append(config.modifiers_display.get(modifierType) + ":");
 																		itemString.append(modifierValue);
 																		modifierMatch = true;
 																	}
 																}
 																if(modifierMatch) itemString.append(")");
 															}
-															if(config.modifierRequirement == 0 || modifierMatch || (config.modifierRequirement == 1 && !modifierExist)) {
+															if(!config.bonusRequired || bonusRequirementMet || modifierRequirementMet) {
 																itemString.append(" bid:" + item.bid/10000 + " buyout:" + item.buyout/10000);
 																if(auctionDataString.length() > 0) auctionDataString.append("\n");
 																auctionDataString.append(itemString.toString());
@@ -214,6 +230,7 @@ public class BoEs {
 			} catch (Exception e) {
 				printer.shutdownNow();
 			}
+			System.exit(0);
 		}
 	}
 	private static Map<String, Object> httpGet(String url) throws Exception {
@@ -489,6 +506,7 @@ public class BoEs {
 			Arrays.asList("ysondre"),
 			Arrays.asList("zirkel-des-cenarius","todeswache")
 		));
+		
 		config.itemids = new LinkedHashMap<>();
 		config.itemids.put(141564, "Telubis' Binding of Patience");
 		config.itemids.put(141565, "Mir's Enthralling Grasp");
@@ -517,32 +535,73 @@ public class BoEs {
 		config.itemids.put(141588, "Talisman of Jaimil Lightheart");
 		config.itemids.put(141589, "Treia's Handcrafted Shroud");
 		config.itemids.put(141590, "Cloak of Martayl Oceanstrider");
-		config.bonusids = new LinkedHashMap<>();
-		config.bonusids.put(40, "Avoidance");
-		config.bonusids.put(41, "Leech");
-		config.bonusids.put(42, "Speed");
-		config.bonusids.put(43, "Indestructible");
-		config.bonusids.put(1808, "Socket");
-		config.bonusids.put(1497, "Item Level 835");
-		config.bonusids.put(1502, "Item Level 840");
-		config.bonusids.put(1507, "Item Level 845");
-		config.bonusids.put(1512, "Item Level 850");
-		config.bonusids.put(1517, "Item Level 855");
-		config.bonusids.put(1522, "Item Level 860");
-		config.bonusids.put(1527, "Item Level 865");
-		config.bonusids.put(1532, "Item Level 870");
-		config.bonusids.put(1537, "Item Level 875");
-		config.bonusids.put(1542, "Item Level 880");
-		config.bonusids.put(1547, "Item Level 885");
-		config.bonusids.put(1552, "Item Level 890");
-		config.bonusids.put(1557, "Item Level 895");
-		config.bonusids.put(3398, "Scales with level");
-		config.bonusRequirement = 1;
-		config.modifierValues = new LinkedHashMap<>();
-		config.modifierValues.put(9, Arrays.asList(98, 99, 100));
-		config.modifiers = new LinkedHashMap<>();
-		config.modifiers.put(9, "Level");
-		config.modifierRequirement = 1;
+		
+		config.bonusRequired = true;
+		config.bonusids_required = new LinkedHashMap<>();
+		config.bonusids_required.put(1512, "Item Level 201");
+		config.bonusids_required.put(1513, "Item Level 202");
+		config.bonusids_required.put(1514, "Item Level 203");
+		config.bonusids_required.put(1515, "Item Level 204");
+		config.bonusids_required.put(1516, "Item Level 205");
+		config.bonusids_required.put(1517, "Item Level 206");
+		config.bonusids_required.put(1518, "Item Level 207");
+		config.bonusids_required.put(1519, "Item Level 208");
+		config.bonusids_required.put(1520, "Item Level 209");
+		config.bonusids_required.put(1521, "Item Level 210");
+		config.bonusids_required.put(1522, "Item Level 211");
+		config.bonusids_required.put(1523, "Item Level 212");
+		config.bonusids_required.put(1524, "Item Level 213");
+		config.bonusids_required.put(1525, "Item Level 214");
+		config.bonusids_required.put(1526, "Item Level 215");
+		config.bonusids_required.put(1527, "Item Level 216");
+		config.bonusids_required.put(1528, "Item Level 217");
+		config.bonusids_required.put(1529, "Item Level 218");
+		config.bonusids_required.put(1530, "Item Level 219");
+		config.bonusids_required.put(1531, "Item Level 220");
+		config.bonusids_required.put(1532, "Item Level 221");
+		config.bonusids_required.put(1533, "Item Level 222");
+		config.bonusids_required.put(1534, "Item Level 223");
+		config.bonusids_required.put(1535, "Item Level 224");
+		config.bonusids_required.put(1536, "Item Level 225");
+		config.bonusids_required.put(1537, "Item Level 226");
+		config.bonusids_required.put(1538, "Item Level 227");
+		config.bonusids_required.put(1539, "Item Level 228");
+		config.bonusids_required.put(1540, "Item Level 229");
+		config.bonusids_required.put(1541, "Item Level 230");
+		config.bonusids_required.put(1542, "Item Level 231");
+		config.bonusids_required.put(1543, "Item Level 232");
+		config.bonusids_required.put(1544, "Item Level 233");
+		config.bonusids_required.put(1545, "Item Level 234");
+		config.bonusids_required.put(1546, "Item Level 235");
+		config.bonusids_required.put(1547, "Item Level 236");
+		config.bonusids_required.put(1548, "Item Level 237");
+		config.bonusids_required.put(1549, "Item Level 238");
+		config.bonusids_required.put(1550, "Item Level 239");
+		config.bonusids_required.put(1551, "Item Level 240");
+		config.bonusids_required.put(1552, "Item Level 241");
+		config.bonusids_required.put(1553, "Item Level 242");
+		config.bonusids_required.put(1554, "Item Level 243");
+		config.bonusids_required.put(1555, "Item Level 244");
+		config.bonusids_required.put(1556, "Item Level 245");
+		config.bonusids_required.put(1557, "Item Level 246");
+		config.bonusids_required.put(1558, "Item Level 247");
+		config.bonusids_required.put(1559, "Item Level 248");
+		config.bonusids_required.put(1550, "Item Level 249");
+		config.bonusids_required.put(1561, "Item Level 250");
+		config.bonusids_required.put(1562, "Item Level 251");
+		config.bonusids_display = new LinkedHashMap<>();
+		config.bonusids_display.put(40, "Avoidance");
+		config.bonusids_display.put(41, "Leech");
+		config.bonusids_display.put(42, "Speed");
+		config.bonusids_display.put(43, "Indestructible");
+		config.bonusids_display.put(1808, "Socket");
+		config.bonusids_display.put(3398, "Scales with level");
+		
+		config.modifierRequired = false;
+		config.modifiers_required = new LinkedHashMap<>();
+		config.modifiers_required.put(9, Arrays.asList(98, 99, 100));
+		config.modifiers_display = new LinkedHashMap<>();
+		config.modifiers_display.put(9, "Level");
 		return config;
 	}
 }
