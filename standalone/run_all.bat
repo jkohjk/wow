@@ -1,0 +1,1 @@
+java -jar wow-legion-boe-all.jar > results_all.txt
